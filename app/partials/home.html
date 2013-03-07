@@ -50,17 +50,20 @@
         </div> <!-- /todo list -->
 
         <div class="span8 demo-video">
-          <!--[if !IE]> -->
             <div id="" class="video-js vjs-paused" width="620" height="349" style="width: 620px; height: 349px;">
+                
+                <video autoplay class="vjs-tech" preload="auto" data-setup="{}" id="sourcevid"></video>
+                
+                <div class="vjs-controls">
+                        
+                    <div ng-click="shareVideo()" class="vjs-play-control vjs-control " tabindex="0"><div><span class="vjs-control-text">Start</span></div></div>
+                    <div class="vjs-current-time vjs-time-controls vjs-control"><div class="vjs-current-time-display">0:00</div></div>
+                    <div class="vjs-time-divider"><div><span>/</span></div></div>
+                    <div class="vjs-duration vjs-time-controls vjs-control"><div class="vjs-duration-display">0:29</div></div>
+                </div>
+            </div>
+              
             
-            <video autoplay class="vjs-tech" preload="auto" data-setup="{}" id="sourcevid">
-              
-              
-            </video>
-                <button type="button" onclick="startVideo();">Start video</button>
-                <button type="button" onclick="stopVideo();">Stop video</button>
-               
-        </div>
        <!-- <![endif]-->
 
 
