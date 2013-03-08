@@ -1,6 +1,6 @@
 /* App Module */
 
-angular.module('idletalk', []).
+angular.module('idletalk', ['idletalkServices']).
   config(['$routeProvider', function($routeProvider) {
   $routeProvider.
       when('/login', {templateUrl: 'app/partials/login.html',   controller: IdleTalkLoginCtrl}).

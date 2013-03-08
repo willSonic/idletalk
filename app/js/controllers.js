@@ -14,7 +14,6 @@ function IdleTalkLoginCtrl($scope, $http) {
         else{
             $scope.loginImage = 'app/images/illustrations/infinity.png';
         }
-        
     }
     
     $scope.submit = function(){
@@ -25,7 +24,7 @@ function IdleTalkLoginCtrl($scope, $http) {
 //PhoneListCtrl.$inject = ['$scope', '$http'];
 
 
-function IdleTalkHomeCtrl($scope, $routeParams) {
+function IdleTalkHomeCtrl($scope, $routeParams, firebaseService) {
     var socket = new WebSocket('ws://124.169.31.194:1337/');
     var sourcevid = document.getElementById('sourcevid');
     var remotevid = document.getElementById('remotevid');
