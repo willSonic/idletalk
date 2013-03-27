@@ -14,7 +14,26 @@ function IdleTalkLoginCtrl($scope, $http) {
         else{
             $scope.loginImage = 'app/images/illustrations/infinity.png';
         }
-    }
+    };
+    $scope.isGeoSupported = navigator.geolocation ? true:false;
+    $scope.locationData = null;
+    $scope.isUserMediaSupported = (navigator.mozGetUserMedia  || navigator.webkitGetUserMedia) ? true: false;
+    
+    
+    $scope.geoLocationHandler = function(){
+        if (navigator.geolocation)
+        {
+            navigator.geolocation.getCurrentPosition(function (position)
+            {
+                alert("Latitude: " + position.coords.latitude + "<br>Longitude: " + position.coords.longitude); 
+                $scope.locationData = position.coords;
+            });
+        }
+        else
+        {
+            alert("Geolocation is not supported by this browser.");
+        }
+    };
     
     $scope.submit = function(){
         
@@ -22,7 +41,10 @@ function IdleTalkLoginCtrl($scope, $http) {
 }
 
 //PhoneListCtrl.$inject = ['$scope', '$http'];
-
+function IdleTalkMapCtrl($scope, webRTCService){
+    $("#map").gmap3();
+    webRTCService.testWrite();
+}
 
 function IdleTalkHomeCtrl($scope, $routeParams, firebaseService) {
     var socket = new WebSocket('ws://124.169.31.194:1337/');

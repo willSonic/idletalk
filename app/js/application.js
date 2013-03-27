@@ -1,11 +1,17 @@
 // Some general UI pack related JS
 
+if (!console || !console.log) {
+  var console = {
+    log: function() {}
+  };
+}
+
 $(function () {
     // Custom selects
     $("select").dropkick();
 });
 
-$(document).ready(function() {
+$(function() {
     // Todo list
     $(".todo li").click(function() {
         $(this).toggleClass("todo-done");
