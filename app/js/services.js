@@ -154,12 +154,25 @@ angular.module("idletalkServices", []).
     .factory('webRTCService', ['firebaseService', function(firebaseService){
         //service keeps track of webrtc session information.
         //code taken from https://github.com/firebase/gupshup/blob/gh-pages/js/chat.js
+        var webRTCService = {};
+        
         
         // Ugh, globals.
         var peerc;
-        var myUserID;
+        webRTCService.myUserID = null;
         var mainRef = firebaseService.ref;
-
+        //default error and log handlers.
+        var error = function(e){
+            if (typeof e == typeof {}) {
+                console.log("Oh no! " + JSON.stringify(e));
+            } else {
+                console.log("Oh no! " + e);
+            }
+            webRTCService.handleEndCall();
+        }
+        var log = function(info){
+            console.log(info);
+        }
         // Shim Firefox & Chrome. Interop stuff.
         var makePC = null;
         var browser = null;
@@ -233,7 +246,6 @@ angular.module("idletalkServices", []).
         
         
         
-        var webRTCService = {};
         
         webRTCService.emailHashID = function(emailAddress){
             return md5(emailAddress.trim().toLowerCase());
@@ -250,7 +262,14 @@ angular.module("idletalkServices", []).
             });
         }
         
-        webRTCService.init = function(name, email, geoData, error){
+        webRTCService.init = function(name, email, geoData, handleError, handleLog){
+            if(handleError){
+                error = handleError;
+            }
+            if(handleLog){
+               log = handleLog; 
+            }
+            
             if (!navigator.mozGetUserMedia && !navigator.webkitGetUserMedia) {
                 error("Sorry, getUserMedia is not available!");
                 return;
@@ -262,15 +281,17 @@ angular.module("idletalkServices", []).
             adapter();
 
             // Ask user to login.
-            var name = prompt("Enter your username", "Guest" + Math.floor(Math.random()*100)+1);
+            //var name = prompt("Enter your username", "Guest" + Math.floor(Math.random()*100)+1);
 
-            myUserID = webRTCService.emailHashID(email);
-            var userRef = mainRef.child(myUserID);
-            var userEmailHash = userRef.child("hash").push(webRTCService.emailHashID(email));
+            webRTCService.myUserID = webRTCService.emailHashID(email);
+            var userRef = mainRef.child(webRTCService.myUserID);
+            var userEmailHash = userRef.child("hash");
             var userSDP = userRef.child("sdp");
             var userICE = userRef.child("ice");
             var userStatus = userRef.child("presence");
-            
+            var userGeoData= userRef.child("geoData");
+            userGeoData.set(geoData);
+            userEmailHash.set(webRTCService.emailHashID(email));
             //set email address,
             //set geolocation data. 
             
@@ -282,7 +303,144 @@ angular.module("idletalkServices", []).
             userStatus.set(true);
         }
         
-      
+        webRTCService.setUserSDP = function(sdpVal){
+            var userSDP = mainRef.child(webRTCService.myUserID).child("sdp");
+            userSDP.set(sdpVal);
+        }
+        
+        webRTCService.setUserICE = function(iceVal){
+            var userSDP = mainRef.child(webRTCService.myUserID).child("ice");
+            userSDP.set(iceVal);
+        }
+        
+        webRTCService.setICECandidate = function(iceData){
+            var candidate = new RTCIceCandidate({
+                sdpMLineIndex: iceData.label, candidate: iceData.candidate
+            });
+            peerc.addIceCandidate(candidate);
+            webRTCService.setUserICE(null);
+        }
+        
+        webRTCService.handleIncomingAnswer = function(answer){
+            var desc = new RTCSessionDescription(JSON.parse(answer));
+            peerc.setRemoteDescription(desc, function() {
+                log("Call established!");
+            }, error);
+        }
+        
+        webRTCService.handleAcceptCall = function(offer, fromUser){
+            log("Incoming call with offer " + offer);
+            getUserMedia({video:true, audio:true}, function(vs) {
+                attachMediaStream(document.getElementById("localvideo"), vs);
+                var pc = makePC();
+                peerc = pc;
+                pc.onicecandidate = function(event) {
+                    if (event.candidate) {
+                        var iceSend = {
+                            to: fromUser,
+                            label: event.candidate.sdpMLineIndex,
+                            id: event.candidate.sdpMid,
+                            candidate: event.candidate.candidate
+                        };
+                        mainRef.child(iceSend.to).child("ice").set(iceSend);
+                    } else {
+                        log("End of ICE candidates");
+                    }
+                };
+                pc.addStream(vs);
+
+                pc.onaddstream = function(obj) {
+                    log("Got onaddstream of type " + obj.type);
+                    attachMediaStream(document.getElementById("remotevideo"), obj.stream);
+                    //document.getElementById("dialing").style.display = "none";
+                    //document.getElementById("hangup").style.display = "block";
+                };
+
+                var desc = new RTCSessionDescription(JSON.parse(offer));
+                pc.setRemoteDescription(desc, function() {
+                log("setRemoteDescription, creating answer");
+                pc.createAnswer(function(answer) {
+                    answer.sdp = ensureCryptoLine(answer.sdp);
+                    pc.setLocalDescription(answer, function() {
+                        // Send answer to remote end.
+                        log("created Answer and setLocalDescription " + JSON.stringify(answer));
+                        var toSend = {
+                            type: "answer",
+                            to: fromUser,
+                            from: webRTCService.myUserID,
+                            answer: JSON.stringify(answer)
+                        };
+                        var toUser = mainRef.child(toSend.to);
+                        var toUserSDP = toUser.child("sdp");
+                        toUserSDP.set(toSend);
+                    }, error);
+                }, error, mediaConstraints);
+                }, error);
+            }, error);
+        }
+        
+        webRTCService.handleInitiateCall = function (userid) {
+  //document.getElementById("main").style.display = "none";
+  //document.getElementById("call").style.display = "block";
+
+  getUserMedia({video:true, audio:true}, function(vs) {
+    attachMediaStream(document.getElementById("localvideo"), vs);
+    var pc = makePC();
+    peerc = pc;
+    pc.onicecandidate = function(event) {
+      if (event.candidate) {
+        var iceSend = {
+          to: userid,
+          label: event.candidate.sdpMLineIndex,
+          id: event.candidate.sdpMid,
+          candidate: event.candidate.candidate
+        };
+        mainRef.child(iceSend.to).child("ice").set(iceSend);
+      } else {
+        log("End of ICE candidates");
+      }
+    };
+    pc.addStream(vs);
+
+    pc.onaddstream = function(obj) {
+      log("Got onaddstream of type " + obj.type);
+      attachMediaStream(document.getElementById("remotevideo"), obj.stream);
+      document.getElementById("dialing").style.display = "none";
+      document.getElementById("hangup").style.display = "block";
+    };
+
+    pc.createOffer(function(offer) {
+      offer.sdp = ensureCryptoLine(offer.sdp);
+      log("Created offer" + JSON.stringify(offer));
+      pc.setLocalDescription(offer, function() {
+        // Send offer to remote end.
+        log("setLocalDescription, sending to remote");
+        var toSend = {
+          type: "offer",
+          to: userid,
+          from: webRTCService.myUserID,
+          offer: JSON.stringify(offer)
+        };
+        var toUser = mainRef.child(toSend.to);
+        var toUserSDP = toUser.child("sdp");
+        toUserSDP.set(toSend);
+      }, error);
+    }, error, mediaConstraints);
+  }, error);
+}
+        
+        webRTCService.handleEndCall =  function() {
+            log("Ending call");
+            document.getElementById("call").style.display = "none";
+            document.getElementById("main").style.display = "block";
+
+            document.getElementById("localvideo").pause();
+            document.getElementById("remotevideo").pause();
+            document.getElementById("localvideo").src = null;
+            document.getElementById("remotevideo").src = null;
+
+            peerc = null;
+        }
         
         return webRTCService;
     }])
@@ -297,50 +455,6 @@ angular.module("idletalkServices", []).
         
         
         
-        //handle users listing
-        var deferred = firebaseService.once(null, 'value');
-        $.when(deferred).done(function(snapshot){
-            console.log('once deferred:', snapshot.val())
-            idleTalkStorageService.users = snapshot.val();
-        });
-        
-        //handler for a new user joining the site.
-        $.when(firebaseService.on(null,'child_added')).progress(function(snapshot){
-            var data = snapshot.val();
-            if (data.presence) {
-                updateUser(snapshot);
-            }
-        });
-        
-        
-        //handler for a user changing /logging in or logging out. 
-        $.when(firebaseService.on(null,'child_changed')).progress(function(snapshot){
-            var data = snapshot.val();
-            if (data.presence) {
-                updateUser(snapshot);
-            }
-            if (!data.presence) {
-                removeUser(snapshot.name());
-            }
-            if (data.sdp && data.sdp.to == myUserID) {
-                if (data.sdp.type == "offer") {
-                    webRTCService.handleIncomingOffer(data.sdp.offer, data.sdp.from);
-                    
-                }
-                if (data.sdp.type == "answer") {
-                    incomingAnswer(data.sdp.answer);
-                    userSDP.set(null);
-                }
-            }
-            if (data.ice && data.ice.to == myUserID) {
-                var candidate = new RTCIceCandidate({
-                    sdpMLineIndex: data.ice.label, candidate: data.ice.candidate
-                });
-                peerc.addIceCandidate(candidate);
-                userICE.set(null);
-            }
-        });
-        
         function updateUser(snapshot){
             idleTalkStorageService.users[snapshot.name()] = snapshot.val();
         };
@@ -352,7 +466,49 @@ angular.module("idletalkServices", []).
             webRTCService.init(idleTalkStorageService.displayName, idleTalkStorageService.email, idleTalkStorageService.geoLocationData)
         }
         
+        //setup the 
+        idleTalkStorageService.init = function(handleIncomingOffer){
+
+            //handle users listing
+            var deferred = firebaseService.once(null, 'value');
+            $.when(deferred).done(function(snapshot){
+                console.log('once deferred:', snapshot.val())
+                idleTalkStorageService.users = snapshot.val();
+            });
+        
+            //handler for a new user joining the site.
+            $.when(firebaseService.on(null,'child_added')).progress(function(snapshot){
+                var data = snapshot.val();
+                if (data.presence) {
+                    updateUser(snapshot);
+                }
+            });
         
         
+            //handler for a user changing /logging in or logging out. 
+            $.when(firebaseService.on(null,'child_changed')).progress(function(snapshot){
+                var data = snapshot.val();
+                if (data.presence) {
+                    updateUser(snapshot);
+                }
+                if (!data.presence) {
+                    removeUser(snapshot.name());
+                }
+                if (data.sdp && data.sdp.to == webRTCService.myUserID) {
+                    if (data.sdp.type == "offer") {
+                        handleIncomingOffer(data.sdp.offer, data.sdp.from);
+                        webRTCService.setUserSDP();
+                    }
+                    if (data.sdp.type == "answer") {
+                        webRTCService.handleIncomingAnswer(data.sdp.answer);
+                        webRTCService.setUserSDP();
+                    }
+                }
+                if (data.ice && data.ice.to == webRTCService.myUserID) {
+                    webRTCService.setICECandidate(data.ice);
+                }
+            });
+        }
         
+        return idleTalkStorageService;
     }]);
